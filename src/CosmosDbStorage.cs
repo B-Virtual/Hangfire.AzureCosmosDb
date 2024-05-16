@@ -107,6 +107,7 @@ public sealed class CosmosDbStorage : JobStorage
 
     private void ConfigureCosmosClientOptions(CosmosClientOptions cosmosClientOptions)
     {
+        cosmosClientOptions.ConnectionMode = ConnectionMode.Direct;
         cosmosClientOptions.ApplicationName ??= "Hangfire";
         cosmosClientOptions.Serializer = new CosmosJsonSerializer(settings);
         cosmosClientOptions.MaxRetryAttemptsOnRateLimitedRequests ??= 9;
