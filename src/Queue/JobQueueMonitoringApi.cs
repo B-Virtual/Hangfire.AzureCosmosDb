@@ -45,7 +45,7 @@ internal class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
 
 	public int GetEnqueuedCount(string queue)
 	{
-		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.name = @name AND NOT IS_DEFINED(doc.fetched_at)")
+		QueryDefinition sql = new QueryDefinition("SELECT TOP 1 VALUE COUNT(1) FROM doc WHERE doc.name = @name AND (NOT IS_DEFINED(doc.fetched_at) OR IS_NULL(doc.fetched_at))")
 			.WithParameter("@name", queue);
 
 		return storage.Container.GetItemQueryIterator<int>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
@@ -53,32 +53,41 @@ internal class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
 			.FirstOrDefault();
 	}
 
-	public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage) => storage.Container.GetItemLinqQueryable<Documents.Queue>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
-		.Where(q => q.Name == queue && q.FetchedAt.IsDefined() == false)
-		.OrderBy(q => q.CreatedOn)
-		.Skip(from).Take(perPage)
-		.Select(q => q.JobId)
-		.ToQueryResult()
-		.ToList();
+	public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage)
+    {
+        QueryDefinition sql = new QueryDefinition("SELECT doc.job_id FROM doc WHERE doc.name = @name AND (NOT IS_DEFINED(doc.fetched_at) OR IS_NULL(doc.fetched_at)) ORDER BY doc.created_on OFFSET @offset LIMIT @limit")
+            .WithParameter("@name", queue)
+            .WithParameter("@offset", from)
+            .WithParameter("@limit", perPage);
+        
+        return storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey }).ToQueryResult();
+    }
 
-	public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage) => storage.Container.GetItemLinqQueryable<Documents.Queue>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
-		.Where(q => q.Name == queue && q.FetchedAt.IsDefined())
-		.OrderBy(q => q.CreatedOn)
-		.Skip(from).Take(perPage)
-		.Select(q => q.JobId)
-		.ToQueryResult()
-		.ToList();
+    public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage)
+    {
+        QueryDefinition sql = new QueryDefinition("SELECT doc.job_id FROM doc WHERE doc.name = @name AND IS_DEFINED(doc.fetched_at) AND NOT IS_NULL(doc.fetched_at) ORDER BY doc.created_on OFFSET @offset LIMIT @limit")
+            .WithParameter("@name", queue)
+            .WithParameter("@offset", from)
+            .WithParameter("@limit", perPage);
+        
+        return storage.Container.GetItemQueryIterator<string>(sql, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey }).ToQueryResult();
+    }
 
-	public (int? EnqueuedCount, int? FetchedCount) GetEnqueuedAndFetchedCount(string queue)
+    public (int? EnqueuedCount, int? FetchedCount) GetEnqueuedAndFetchedCount(string queue)
 	{
-		(int EnqueuedCount, int FetchedCount) result = storage.Container.GetItemLinqQueryable<Documents.Queue>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
-			.Where(q => q.Name == queue)
-			.Select(q => new { q.Name, EnqueuedCount = q.FetchedAt.IsDefined() ? 0 : 1, FetchedCount = q.FetchedAt.IsDefined() ? 1 : 0 })
-			.ToQueryResult()
-			.GroupBy(q => q.Name)
-			.Select(v => (EnqueuedCount: v.Sum(q => q.EnqueuedCount), FetchedCount: v.Sum(q => q.FetchedCount)))
-			.FirstOrDefault();
+        QueryDefinition sqlQueued = new QueryDefinition("SELECT COUNT(1) FROM doc WHERE doc.name = @name AND (NOT IS_DEFINED(doc.fetched_at) OR IS_NULL(doc.fetched_at))")
+            .WithParameter("@name", queue);
+        QueryDefinition sqlFetched = new QueryDefinition("SELECT COUNT(1) FROM doc WHERE doc.name = @name AND IS_DEFINED(doc.fetched_at) AND NOT IS_NULL(doc.fetched_at)")
+            .WithParameter("@name", queue);
 
-		return result;
+        int queued = storage.Container.GetItemQueryIterator<int>(sqlQueued, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
+            .ToQueryResult()
+            .FirstOrDefault();
+        
+        int fetched = storage.Container.GetItemQueryIterator<int>(sqlFetched, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
+            .ToQueryResult()
+            .FirstOrDefault();
+        
+		return new ValueTuple<int?, int?>(queued, fetched);
 	}
 }
