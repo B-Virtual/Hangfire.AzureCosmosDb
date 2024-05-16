@@ -55,7 +55,7 @@ internal class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
 
 	public IEnumerable<string> GetEnqueuedJobIds(string queue, int from, int perPage)
     {
-        QueryDefinition sql = new QueryDefinition("SELECT doc.job_id FROM doc WHERE doc.name = @name AND (NOT IS_DEFINED(doc.fetched_at) OR IS_NULL(doc.fetched_at)) ORDER BY doc.created_on OFFSET @offset LIMIT @limit")
+        QueryDefinition sql = new QueryDefinition("SELECT VALUE doc.job_id FROM doc WHERE doc.name = @name AND (NOT IS_DEFINED(doc.fetched_at) OR IS_NULL(doc.fetched_at)) ORDER BY doc.created_on OFFSET @offset LIMIT @limit")
             .WithParameter("@name", queue)
             .WithParameter("@offset", from)
             .WithParameter("@limit", perPage);
@@ -65,7 +65,7 @@ internal class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
 
     public IEnumerable<string> GetFetchedJobIds(string queue, int from, int perPage)
     {
-        QueryDefinition sql = new QueryDefinition("SELECT doc.job_id FROM doc WHERE doc.name = @name AND IS_DEFINED(doc.fetched_at) AND NOT IS_NULL(doc.fetched_at) ORDER BY doc.created_on OFFSET @offset LIMIT @limit")
+        QueryDefinition sql = new QueryDefinition("SELECT VALUE doc.job_id FROM doc WHERE doc.name = @name AND IS_DEFINED(doc.fetched_at) AND NOT IS_NULL(doc.fetched_at) ORDER BY doc.created_on OFFSET @offset LIMIT @limit")
             .WithParameter("@name", queue)
             .WithParameter("@offset", from)
             .WithParameter("@limit", perPage);
@@ -75,9 +75,9 @@ internal class JobQueueMonitoringApi : IPersistentJobQueueMonitoringApi
 
     public (int? EnqueuedCount, int? FetchedCount) GetEnqueuedAndFetchedCount(string queue)
 	{
-        QueryDefinition sqlQueued = new QueryDefinition("SELECT COUNT(1) FROM doc WHERE doc.name = @name AND (NOT IS_DEFINED(doc.fetched_at) OR IS_NULL(doc.fetched_at))")
+        QueryDefinition sqlQueued = new QueryDefinition("SELECT VALUE COUNT(1) FROM doc WHERE doc.name = @name AND (NOT IS_DEFINED(doc.fetched_at) OR IS_NULL(doc.fetched_at))")
             .WithParameter("@name", queue);
-        QueryDefinition sqlFetched = new QueryDefinition("SELECT COUNT(1) FROM doc WHERE doc.name = @name AND IS_DEFINED(doc.fetched_at) AND NOT IS_NULL(doc.fetched_at)")
+        QueryDefinition sqlFetched = new QueryDefinition("SELECT VALUE COUNT(1) FROM doc WHERE doc.name = @name AND IS_DEFINED(doc.fetched_at) AND NOT IS_NULL(doc.fetched_at)")
             .WithParameter("@name", queue);
 
         int queued = storage.Container.GetItemQueryIterator<int>(sqlQueued, requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
